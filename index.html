@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MiniDB – veja um banco de dados por dentro</title>
+    <style>
+      :root {
+        --bg: #eef2f6;
+        --panel: #fff;
+        --ink: #14213d;
+        --mute: #5b6b82;
+        --line: #d5dde8;
+        --accent: #0f8b8d;
+        --read: #fde7bd;
+        --hit: #bfeadf;
+        --err: #b3261e;
+        box-sizing: border-box;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: inherit;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          16px/1.55 "Segoe UI",
+          Helvetica,
+          Arial,
+          sans-serif;
+      }
+      header {
+        padding: 32px 20px 8px;
+        max-width: 1180px;
+        margin: auto;
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: clamp(1.7rem, 4vw, 2.5rem);
+        letter-spacing: -0.02em;
+      }
+      header p {
+        margin: 0;
+        max-width: 62ch;
+        color: var(--mute);
+      }
+      main {
+        max-width: 1180px;
+        margin: auto;
+        padding: 16px 20px 48px;
+        display: grid;
+        gap: 20px;
+        grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+      }
+      @media (max-width: 900px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+      }
+      section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 18px;
+      }
+      h2 {
+        margin: 0 0 10px;
+        font-size: 1.1rem;
+      }
+      h3 {
+        margin: 14px 0 6px;
+        font-size: 0.95rem;
+        font-family: Consolas, Menlo, monospace;
+        color: var(--accent);
+      }
+      .wrap {
+        overflow-x: auto;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 0.9rem;
+      }
+      th,
+      td {
+        padding: 5px 10px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        white-space: nowrap;
+      }
+      th {
+        background: #f4f7fa;
+        font-weight: 600;
+      }
+      tr.read td {
+        background: var(--read);
+      }
+      tr.hit td {
+        background: var(--hit);
+      }
+      .legend {
+        display: flex;
+        gap: 14px;
+        font-size: 0.85rem;
+        color: var(--mute);
+        margin-top: 10px;
+        flex-wrap: wrap;
+      }
+      .legend i {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+        margin-right: 5px;
+        vertical-align: -1px;
+      }
+      textarea {
+        width: 100%;
+        height: 110px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        font:
+          0.95rem/1.5 Consolas,
+          Menlo,
+          monospace;
+        color: var(--ink);
+        resize: vertical;
+      }
+      textarea:focus,
+      button:focus-visible,
+      input:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .bar {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin: 10px 0;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--ink);
+        padding: 6px 12px;
+      }
+      button.run {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+        font-weight: 600;
+      }
+      button:hover {
+        border-color: var(--accent);
+      }
+      .ex {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .ex button {
+        font:
+          0.8rem Consolas,
+          Menlo,
+          monospace;
+        padding: 4px 8px;
+        text-align: left;
+      }
+      label {
+        font-size: 0.9rem;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        margin-left: auto;
+      }
+      .steps {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin: 14px 0;
+      }
+      @media (max-width: 620px) {
+        .steps {
+          grid-template-columns: 1fr;
+        }
+      }
+      .step {
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 0.88rem;
+      }
+      .step b {
+        display: block;
+        margin-bottom: 2px;
+      }
+      .err {
+        color: var(--err);
+        font-weight: 600;
+        margin: 10px 0;
+      }
+      .msg {
+        margin: 10px 0;
+        color: var(--mute);
+        font-size: 0.9rem;
+      }
+      details {
+        margin-top: 14px;
+        font-size: 0.92rem;
+        color: var(--mute);
+      }
+      summary {
+        cursor: pointer;
+        color: var(--ink);
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>MiniDB: um banco de dados por dentro</h1>
+      <p>
+        Um banco guarda dados em tabelas, feitas de linhas e colunas. Você pede
+        o que quer em SQL e o banco decide como buscar. Rode uma consulta e
+        veja, a cada passo, quais linhas ele precisou ler.
+      </p>
+    </header>
+    <main>
+      <section aria-labelledby="t-dados">
+        <h2 id="t-dados">Tabelas</h2>
+        <div id="tables"></div>
+        <div class="legend">
+          <span
+            ><i style="background: var(--read)"></i>linha lida pelo banco</span
+          ><span
+            ><i style="background: var(--hit)"></i>linha que atende à
+            consulta</span
+          >
+        </div>
+      </section>
+
+      <section aria-labelledby="t-sql">
+        <h2 id="t-sql">Console SQL</h2>
+        <textarea id="sql" spellcheck="false" aria-label="Consulta SQL">
+SELECT nome, cidade FROM clientes WHERE cidade = 'São Paulo' ORDER BY nome</textarea
+        >
+        <div class="bar">
+          <button class="run" id="run">Executar</button>
+          <button id="reset">Restaurar dados</button>
+          <label><input type="checkbox" id="idx" /> Índice na coluna id</label>
+        </div>
+        <div class="ex" id="examples"></div>
+
+        <div id="out"></div>
+
+        <details>
+          <summary>O que cada etapa significa</summary>
+          <p>
+            <b>Parser:</b> lê o texto SQL e entende o que você quer (tabela,
+            filtros, ordem).<br />
+            <b>Plano:</b> escolhe o caminho mais barato. Sem índice, lê a tabela
+            inteira (varredura completa). Com índice, vai direto à linha, como o
+            índice remissivo de um livro.<br />
+            <b>Execução:</b> percorre as linhas, aplica o filtro e devolve o
+            resultado. Quanto menos linhas lidas, mais rápida a consulta.
+          </p>
+          <p>
+            Comandos aceitos: SELECT (com WHERE, JOIN, ORDER BY, LIMIT e
+            COUNT(*)), INSERT, UPDATE e DELETE.
+          </p>
+        </details>
+      </section>
+    </main>
+
+    <script>
+      const initial = () => ({
+        clientes: {
+          cols: ["id", "nome", "cidade"],
+          rows: [
+            { id: 1, nome: "Ana", cidade: "São Paulo" },
+            { id: 2, nome: "Bruno", cidade: "Recife" },
+            { id: 3, nome: "Carla", cidade: "São Paulo" },
+            { id: 4, nome: "Diego", cidade: "Curitiba" },
+            { id: 5, nome: "Elisa", cidade: "Recife" },
+            { id: 6, nome: "Fábio", cidade: "São Paulo" },
+            { id: 7, nome: "Gabi", cidade: "Salvador" },
+            { id: 8, nome: "Hugo", cidade: "Curitiba" },
+            { id: 9, nome: "Íris", cidade: "São Paulo" },
+            { id: 10, nome: "João", cidade: "Salvador" },
+          ],
+        },
+        pedidos: {
+          cols: ["id", "cliente_id", "produto", "valor"],
+          rows: [
+            { id: 1, cliente_id: 1, produto: "Teclado", valor: 150 },
+            { id: 2, cliente_id: 3, produto: "Mouse", valor: 60 },
+            { id: 3, cliente_id: 1, produto: "Monitor", valor: 900 },
+            { id: 4, cliente_id: 5, produto: "Cabo HDMI", valor: 30 },
+            { id: 5, cliente_id: 7, produto: "Webcam", valor: 220 },
+            { id: 6, cliente_id: 2, produto: "Headset", valor: 180 },
+            { id: 7, cliente_id: 9, produto: "Mouse", valor: 60 },
+            { id: 8, cliente_id: 3, produto: "Notebook", valor: 3500 },
+            { id: 9, cliente_id: 6, produto: "Teclado", valor: 150 },
+            { id: 10, cliente_id: 4, produto: "Cabo HDMI", valor: 30 },
+            { id: 11, cliente_id: 10, produto: "Monitor", valor: 900 },
+            { id: 12, cliente_id: 1, produto: "Mouse", valor: 60 },
+          ],
+        },
+      });
+      let DB = initial(),
+        HL = {};
+      const $ = (id) => document.getElementById(id);
+      const esc = (s) =>
+        String(s ?? "NULL").replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+
+      function tbl(n) {
+        const t = DB[n.toLowerCase()];
+        if (!t) throw Error("Tabela não existe: " + n);
+        return t;
+      }
+      function lit(s) {
+        s = s.trim();
+        if (/^'.*'$/s.test(s)) return s.slice(1, -1);
+        if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s);
+        if (/^null$/i.test(s)) return null;
+      }
+      function operand(s, ctx) {
+        const l = lit(s);
+        if (l !== undefined) return l;
+        if (s in ctx) return ctx[s];
+        throw Error("Coluna desconhecida: " + s);
+      }
+      function cmp(a, op, b) {
+        switch (op.toLowerCase()) {
+          case "=":
+            return a == b;
+          case "!=":
+          case "<>":
+            return a != b;
+          case ">":
+            return a > b;
+          case "<":
+            return a < b;
+          case ">=":
+            return a >= b;
+          case "<=":
+            return a <= b;
+          case "like":
+            return new RegExp(
+              "^" +
+                String(b)
+                  .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+                  .replace(/%/g, ".*")
+                  .replace(/_/g, ".") +
+                "$",
+              "i",
+            ).test(a);
+        }
+      }
+      function test(cond, ctx) {
+        if (!cond) return true;
+        return cond.split(/\s+or\s+/i).some((o) =>
+          o.split(/\s+and\s+/i).every((p) => {
+            const m = p
+              .trim()
+              .match(/^([\w.]+)\s*(<=|>=|<>|!=|=|<|>|like)\s*(.+)$/i);
+            if (!m) throw Error("Condição inválida: " + p.trim());
+            return cmp(operand(m[1], ctx), m[2], operand(m[3], ctx));
+          }),
+        );
+      }
+      function ctxOf(name, alias, t, row) {
+        const o = {};
+        for (const c of t.cols) {
+          o[c] = row[c];
+          o[name.toLowerCase() + "." + c] = row[c];
+          if (alias) o[alias + "." + c] = row[c];
+        }
+        return o;
+      }
+      const KW = "(?!inner\\b|join\\b|where\\b|order\\b|limit\\b)";
+      const SELECT = new RegExp(
+        "^select\\s+(.+?)\\s+from\\s+(\\w+)(?:\\s+" +
+          KW +
+          "(\\w+))?(?:\\s+(?:inner\\s+)?join\\s+(\\w+)(?:\\s+" +
+          KW +
+          "(\\w+))?\\s+on\\s+(.+?))?(?:\\s+where\\s+(.+?))?(?:\\s+order\\s+by\\s+(.+?))?(?:\\s+limit\\s+(\\d+))?$",
+        "is",
+      );
+
+      function runSelect(m) {
+        const [, colsS, n1, a1, n2, a2, on, where, order, limit] = m;
+        const T1 = tbl(n1),
+          T2 = n2 ? tbl(n2) : null;
+        let ctxs = [],
+          read = 0,
+          plan,
+          hl = {},
+          scan1 = new Set(),
+          scan2 = new Set(),
+          hit1 = new Set();
+        const idm =
+          where && !T2 && where.trim().match(/^(?:\w+\.)?id\s*=\s*(\d+)$/i);
+        if (!T2 && $("idx").checked && idm) {
+          const i = T1.rows.findIndex((r) => r.id == idm[1]);
+          read = 1;
+          if (i >= 0) {
+            scan1.add(i);
+            hit1.add(i);
+            ctxs.push(Object.assign(ctxOf(n1, a1, T1, T1.rows[i]), { __r: i }));
+          }
+          plan =
+            "Índice em id: vai direto à linha pedida, sem percorrer a tabela.";
+        } else if (!T2) {
+          T1.rows.forEach((r, i) => {
+            read++;
+            scan1.add(i);
+            const c = ctxOf(n1, a1, T1, r);
+            if (test(where, c)) {
+              hit1.add(i);
+              c.__r = i;
+              ctxs.push(c);
+            }
+          });
+          plan =
+            "Varredura completa de " +
+            n1 +
+            ": lê cada linha e confere o filtro.";
+        } else {
+          T1.rows.forEach((r1, i) => {
+            scan1.add(i);
+            T2.rows.forEach((r2, j) => {
+              read++;
+              scan2.add(j);
+              const c = Object.assign(
+                {},
+                ctxOf(n2, a2, T2, r2),
+                ctxOf(n1, a1, T1, r1),
+              );
+              if (test(on, c) && test(where, c)) ctxs.push(c);
+            });
+          });
+          plan =
+            "Junção por laços aninhados: compara cada linha de " +
+            n1 +
+            " com cada linha de " +
+            n2 +
+            " (" +
+            T1.rows.length +
+            " × " +
+            T2.rows.length +
+            " comparações).";
+        }
+        hl[n1.toLowerCase()] = { read: scan1, hit: hit1 };
+        if (T2) hl[n2.toLowerCase()] = { read: scan2, hit: new Set() };
+        if (order) {
+          const o = order.trim().match(/^([\w.]+)(?:\s+(asc|desc))?$/i);
+          if (!o) throw Error("ORDER BY inválido");
+          const d = /desc/i.test(o[2] || "") ? -1 : 1;
+          ctxs.forEach((c) => {
+            if (!(o[1] in c)) throw Error("Coluna desconhecida: " + o[1]);
+          });
+          ctxs.sort(
+            (x, y) => (x[o[1]] > y[o[1]] ? 1 : x[o[1]] < y[o[1]] ? -1 : 0) * d,
+          );
+          plan += " Depois ordena por " + o[1] + ".";
+        }
+        if (limit) ctxs = ctxs.slice(0, +limit);
+        let cols, rows;
+        if (/^count\(\*\)$/i.test(colsS.trim())) {
+          cols = ["count(*)"];
+          rows = [[ctxs.length]];
+        } else {
+          let keys =
+            colsS.trim() === "*"
+              ? T2
+                ? [
+                    ...T1.cols.map((c) => n1.toLowerCase() + "." + c),
+                    ...T2.cols.map((c) => n2.toLowerCase() + "." + c),
+                  ]
+                : T1.cols
+              : colsS.split(",").map((s) => s.trim());
+          cols = keys;
+          rows = ctxs.map((c) =>
+            keys.map((k) => {
+              if (!(k in c)) throw Error("Coluna desconhecida: " + k);
+              return c[k];
+            }),
+          );
+        }
+        return {
+          cols,
+          rows,
+          read,
+          plan,
+          hl,
+          kind:
+            "SELECT em " +
+            n1 +
+            (T2 ? " com JOIN em " + n2 : "") +
+            (where ? " com filtro WHERE" : ""),
+        };
+      }
+      function parseVals(s) {
+        return (s.match(/'[^']*'|[^,]+/g) || []).map((v) => {
+          const l = lit(v);
+          if (l === undefined) throw Error("Valor inválido: " + v.trim());
+          return l;
+        });
+      }
+      function exec(sql) {
+        sql = sql.trim().replace(/;+\s*$/, "");
+        let m;
+        if (/^select/i.test(sql)) {
+          m = sql.match(SELECT);
+          if (!m) throw Error("Não entendi o SELECT. Confira a sintaxe.");
+          return runSelect(m);
+        }
+        if (
+          (m = sql.match(
+            /^insert\s+into\s+(\w+)\s*(?:\(([^)]+)\))?\s*values\s*\((.+)\)$/is,
+          ))
+        ) {
+          const T = tbl(m[1]),
+            cols = m[2] ? m[2].split(",").map((s) => s.trim()) : T.cols,
+            vals = parseVals(m[3]);
+          if (cols.length !== vals.length)
+            throw Error(
+              "Número de valores (" +
+                vals.length +
+                ") diferente do de colunas (" +
+                cols.length +
+                ").",
+            );
+          const row = {};
+          T.cols.forEach((c) => (row[c] = null));
+          cols.forEach((c, i) => {
+            if (!T.cols.includes(c)) throw Error("Coluna desconhecida: " + c);
+            row[c] = vals[i];
+          });
+          if (T.cols.includes("id") && T.rows.some((r) => r.id === row.id))
+            throw Error(
+              "Já existe uma linha com id " +
+                row.id +
+                " (chave primária duplicada).",
+            );
+          T.rows.push(row);
+          return {
+            msg: "1 linha inserida em " + m[1] + ".",
+            read: 0,
+            plan: "Acrescenta a linha ao fim da tabela; se houvesse índice, ele também seria atualizado.",
+            hl: {
+              [m[1].toLowerCase()]: {
+                read: new Set(),
+                hit: new Set([T.rows.length - 1]),
+              },
+            },
+            kind: "INSERT em " + m[1],
+          };
+        }
+        if (
+          (m = sql.match(
+            /^update\s+(\w+)\s+set\s+(.+?)(?:\s+where\s+(.+))?$/is,
+          ))
+        ) {
+          const T = tbl(m[1]),
+            sets = [...m[2].matchAll(/(\w+)\s*=\s*('[^']*'|[^,]+)/g)].map(
+              (x) => [x[1], lit(x[2])],
+            );
+          sets.forEach(([c, v]) => {
+            if (!T.cols.includes(c)) throw Error("Coluna desconhecida: " + c);
+            if (v === undefined) throw Error("Valor inválido");
+          });
+          const read = new Set(),
+            hit = new Set();
+          T.rows.forEach((r, i) => {
+            read.add(i);
+            if (test(m[3], ctxOf(m[1], "", T, r))) {
+              hit.add(i);
+              sets.forEach(([c, v]) => (r[c] = v));
+            }
+          });
+          return {
+            msg: hit.size + " linha(s) atualizada(s).",
+            read: read.size,
+            plan:
+              "Varredura completa de " +
+              m[1] +
+              ": altera as linhas que passam no filtro.",
+            hl: { [m[1].toLowerCase()]: { read, hit } },
+            kind: "UPDATE em " + m[1],
+          };
+        }
+        if ((m = sql.match(/^delete\s+from\s+(\w+)(?:\s+where\s+(.+))?$/is))) {
+          const T = tbl(m[1]),
+            read = new Set(),
+            n = T.rows.length,
+            keep = [];
+          T.rows.forEach((r, i) => {
+            read.add(i);
+            if (!test(m[2], ctxOf(m[1], "", T, r))) keep.push(r);
+          });
+          T.rows = keep;
+          return {
+            msg: n - keep.length + " linha(s) removida(s).",
+            read: n,
+            plan:
+              "Varredura completa de " +
+              m[1] +
+              ": descarta as linhas que passam no filtro.",
+            hl: {},
+            kind: "DELETE em " + m[1],
+          };
+        }
+        throw Error(
+          "Comando não reconhecido. Use SELECT, INSERT, UPDATE ou DELETE.",
+        );
+      }
+
+      function renderTables() {
+        $("tables").innerHTML = Object.entries(DB)
+          .map(([n, t]) => {
+            const h = HL[n] || { read: new Set(), hit: new Set() };
+            return (
+              "<h3>" +
+              n +
+              " (" +
+              t.rows.length +
+              ' linhas)</h3><div class="wrap"><table><tr>' +
+              t.cols.map((c) => "<th>" + c + "</th>").join("") +
+              "</tr>" +
+              t.rows
+                .map(
+                  (r, i) =>
+                    '<tr class="' +
+                    (h.hit.has(i) ? "hit" : h.read.has(i) ? "read" : "") +
+                    '">' +
+                    t.cols.map((c) => "<td>" + esc(r[c]) + "</td>").join("") +
+                    "</tr>",
+                )
+                .join("") +
+              "</table></div>"
+            );
+          })
+          .join("");
+      }
+      function run() {
+        const out = $("out");
+        try {
+          const r = exec($("sql").value);
+          HL = r.hl || {};
+          renderTables();
+          let html =
+            '<div class="steps"><div class="step"><b>1. Parser</b>Entendeu: ' +
+            esc(r.kind) +
+            '.</div><div class="step"><b>2. Plano</b>' +
+            esc(r.plan) +
+            '</div><div class="step"><b>3. Execução</b>' +
+            r.read +
+            " linha(s)/comparação(ões) lida(s)" +
+            (r.rows ? ", " + r.rows.length + " devolvida(s)." : ".") +
+            "</div></div>";
+          if (r.rows)
+            html += r.rows.length
+              ? '<div class="wrap"><table><tr>' +
+                r.cols.map((c) => "<th>" + esc(c) + "</th>").join("") +
+                "</tr>" +
+                r.rows
+                  .map(
+                    (x) =>
+                      "<tr>" +
+                      x.map((v) => "<td>" + esc(v) + "</td>").join("") +
+                      "</tr>",
+                  )
+                  .join("") +
+                "</table></div>"
+              : '<p class="msg">Nenhuma linha atende à consulta.</p>';
+          else html += '<p class="msg">' + esc(r.msg) + "</p>";
+          out.innerHTML = html;
+        } catch (e) {
+          out.innerHTML = '<p class="err">Erro: ' + esc(e.message) + "</p>";
+        }
+      }
+      const EX = [
+        "SELECT * FROM clientes",
+        "SELECT nome, cidade FROM clientes WHERE cidade = 'São Paulo' ORDER BY nome",
+        "SELECT * FROM clientes WHERE id = 7",
+        "SELECT c.nome, p.produto, p.valor FROM clientes c JOIN pedidos p ON c.id = p.cliente_id WHERE p.valor > 100",
+        "SELECT COUNT(*) FROM pedidos WHERE valor >= 100",
+        "INSERT INTO clientes VALUES (11, 'Lia', 'Recife')",
+        "UPDATE pedidos SET valor = 99 WHERE id = 3",
+        "DELETE FROM pedidos WHERE valor < 50",
+      ];
+      $("examples").innerHTML = EX.map(
+        (q, i) =>
+          '<button data-i="' +
+          i +
+          '">' +
+          esc(q.length > 38 ? q.slice(0, 36) + "…" : q) +
+          "</button>",
+      ).join("");
+      $("examples").onclick = (e) => {
+        const b = e.target.closest("button");
+        if (b) {
+          $("sql").value = EX[b.dataset.i];
+          run();
+        }
+      };
+      $("run").onclick = run;
+      $("reset").onclick = () => {
+        DB = initial();
+        HL = {};
+        renderTables();
+        $("out").innerHTML = "";
+      };
+      $("sql").addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) run();
+      });
+      renderTables();
+      run();
+    </script>
+  </body>
+</html>
